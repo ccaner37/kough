@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { Tag, Plus, X } from "lucide-react";
+import { Tag as TagIcon, Plus, X, Pencil } from "lucide-react";
 import { useTagStore } from "@/stores/tagStore";
 import { useBoardStore } from "@/stores/boardStore";
 import { TagBadge } from "./TagBadge";
-import { DEFAULT_TAG_COLORS } from "@/types";
+import { DEFAULT_TAG_COLORS, type Tag } from "@/types";
 
 export function TagFilter() {
-  const { tags, activeTagFilters, toggleTagFilter, clearTagFilters, createTag } =
+  const { tags, activeTagFilters, toggleTagFilter, clearTagFilters, createTag, updateTag } =
     useTagStore();
   const { activeBoardId } = useBoardStore();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(DEFAULT_TAG_COLORS[0]);
+  const [editingTagId, setEditingTagId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState("");
 
   const handleCreate = async () => {
     const trimmed = newName.trim();
@@ -19,6 +22,24 @@ export function TagFilter() {
     await createTag(activeBoardId, trimmed, newColor);
     setNewName("");
     setShowCreate(false);
+  };
+
+  const startEditing = (tag: Tag) => {
+    setEditingTagId(tag.id);
+    setEditName(tag.name);
+    setEditColor(tag.color);
+    setShowCreate(false);
+  };
+
+  const handleUpdate = async () => {
+    const trimmed = editName.trim();
+    if (!trimmed || !editingTagId) return;
+    await updateTag(editingTagId, { name: trimmed, color: editColor });
+    setEditingTagId(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingTagId(null);
   };
 
   if (tags.length === 0 && !showCreate) {
@@ -37,21 +58,70 @@ export function TagFilter() {
 
   return (
     <div className="flex items-center gap-2 px-4 py-2 border-b border-border overflow-x-auto">
-      <Tag size={14} className="text-muted-foreground flex-shrink-0" />
+      <TagIcon size={14} className="text-muted-foreground flex-shrink-0" />
 
-      {tags.map((tag) => (
-        <button
-          key={tag.id}
-          onClick={() => toggleTagFilter(tag.id)}
-          className={`flex-shrink-0 rounded-full transition-all ${
-            activeTagFilters.has(tag.id)
-              ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
-              : "opacity-60 hover:opacity-100"
-          }`}
-        >
-          <TagBadge tag={tag} />
-        </button>
-      ))}
+      {tags.map((tag) =>
+        editingTagId === tag.id ? (
+          <div key={tag.id} className="flex items-center gap-2 flex-shrink-0">
+            <input
+              autoFocus
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleUpdate();
+                if (e.key === "Escape") cancelEdit();
+              }}
+              className="w-24 rounded bg-secondary px-2 py-0.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            />
+            <div className="flex gap-1">
+              {DEFAULT_TAG_COLORS.slice(0, 6).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setEditColor(c)}
+                  className={`h-4 w-4 rounded-full border-2 ${
+                    editColor === c ? "border-white" : "border-transparent"
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+            <button
+              onClick={handleUpdate}
+              className="rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground"
+            >
+              Save
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div key={tag.id} className="relative group/tag flex-shrink-0">
+            <button
+              onClick={() => toggleTagFilter(tag.id)}
+              className={`rounded-full transition-all ${
+                activeTagFilters.has(tag.id)
+                  ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
+                  : "opacity-60 hover:opacity-100"
+              }`}
+            >
+              <TagBadge tag={tag} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                startEditing(tag);
+              }}
+              className="absolute -top-1 -right-1 hidden group-hover/tag:flex items-center justify-center h-4 w-4 rounded-full bg-background border border-border text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Pencil size={8} />
+            </button>
+          </div>
+        )
+      )}
 
       {activeTagFilters.size > 0 && (
         <button
@@ -64,13 +134,16 @@ export function TagFilter() {
       )}
 
       <button
-        onClick={() => setShowCreate(!showCreate)}
+        onClick={() => {
+          setShowCreate(!showCreate);
+          setEditingTagId(null);
+        }}
         className="flex-shrink-0 rounded p-1 text-muted-foreground hover:bg-accent"
       >
         <Plus size={14} />
       </button>
 
-      {showCreate && (
+      {showCreate && editingTagId === null && (
         <div className="flex items-center gap-2 flex-shrink-0">
           <input
             autoFocus

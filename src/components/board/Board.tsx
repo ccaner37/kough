@@ -192,24 +192,22 @@ export function Board() {
       <DragOverlay dropAnimation={null}>
         {activeTask ? (
           <div className="rounded-md border border-border bg-background p-3 shadow-2xl ring-2 ring-ring/30 rotate-1 scale-[1.02] cursor-grabbing">
-            <div className="flex items-start gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span
-                    className={`inline-block h-2 w-2 rounded-full ${
-                      activeTask.priority === "low"
-                        ? "bg-slate-500"
-                        : activeTask.priority === "medium"
-                        ? "bg-blue-500"
-                        : activeTask.priority === "high"
-                        ? "bg-orange-500"
-                        : "bg-red-500"
-                    }`}
-                  />
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {activeTask.title}
-                  </p>
-                </div>
+            <div className="min-w-0">
+              <div className="flex items-start gap-2 mb-1">
+                <span
+                  className={`inline-block mt-1 h-2 w-2 rounded-full flex-shrink-0 ${
+                    activeTask.priority === "low"
+                      ? "bg-slate-500"
+                      : activeTask.priority === "medium"
+                      ? "bg-blue-500"
+                      : activeTask.priority === "high"
+                      ? "bg-orange-500"
+                      : "bg-red-500"
+                  }`}
+                />
+                <p className="text-sm font-medium text-foreground break-words">
+                  {activeTask.title}
+                </p>
               </div>
             </div>
           </div>
