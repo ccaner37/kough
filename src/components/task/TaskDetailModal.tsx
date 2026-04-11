@@ -1,7 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,158 +7,21 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useTaskStore } from "@/stores/taskStore";
 import { useTagStore } from "@/stores/tagStore";
 import { PRIORITY_CONFIG, type Priority } from "@/types";
 import { cn } from "@/lib/utils";
-
-function detectLineType(line: string): "h1" | "h2" | "h3" | "h4" | "checkbox-checked" | "checkbox-unchecked" | "list" | "blockquote" | "code" | "hr" | "empty" | "paragraph" {
-  if (!line.trim()) return "empty";
-  if (/^#{1}\s/.test(line)) return "h1";
-  if (/^#{2}\s/.test(line)) return "h2";
-  if (/^#{3}\s/.test(line)) return "h3";
-  if (/^#{4,}\s/.test(line)) return "h4";
-  if (/^[-*]\s+\[x\]/i.test(line)) return "checkbox-checked";
-  if (/^[-*]\s+\[\s\]/.test(line)) return "checkbox-unchecked";
-  if (/^[-*]\s+/.test(line)) return "list";
-  if (/^>\s/.test(line)) return "blockquote";
-  if (/^---+$/.test(line.trim())) return "hr";
-  return "paragraph";
-}
-
-function extractCheckboxState(line: string): { checked: boolean; text: string } {
-  const match = line.match(/^[-*]\s+\[([xX ])\]\s*(.*)/);
-  if (!match) return { checked: false, text: line };
-  return { checked: match[1].toLowerCase() === "x", text: match[2] };
-}
-
-function LineEditor({
-  line,
-  isActive,
-  onActivate,
-  onChange,
-  onInsertBelow,
-  onRemoveLine,
-}: {
-  line: string;
-  isActive: boolean;
-  onActivate: () => void;
-  onChange: (value: string) => void;
-  onInsertBelow: () => void;
-  onRemoveLine: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const lineType = detectLineType(line);
-
-  useEffect(() => {
-    if (isActive && inputRef.current) {
-      inputRef.current.focus();
-      const len = inputRef.current.value.length;
-      inputRef.current.setSelectionRange(len, len);
-    }
-  }, [isActive]);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      onInsertBelow();
-    }
-    if (e.key === "Backspace" && !line && e.currentTarget.selectionStart === 0) {
-      e.preventDefault();
-      onRemoveLine();
-    }
-    if (e.key === "ArrowDown" && e.currentTarget.selectionStart !== null && e.currentTarget.selectionStart >= line.length) {
-      e.preventDefault();
-      onInsertBelow();
-    }
-  };
-
-  const getFontClass = () => {
-    switch (lineType) {
-      case "h1": return "text-2xl font-bold";
-      case "h2": return "text-xl font-bold";
-      case "h3": return "text-lg font-semibold";
-      case "h4": return "text-base font-semibold";
-      default: return "text-sm";
-    }
-  };
-
-  return (
-    <div
-      className={cn(
-        "group/block relative rounded px-1 -mx-1 cursor-text min-h-[1.65em]",
-        isActive ? "bg-muted/40" : "hover:bg-muted/15",
-      )}
-      onClick={onActivate}
-    >
-      {isActive ? (
-        <input
-          ref={inputRef}
-          type="text"
-          value={line}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={() => {}}
-          className={cn(
-            "w-full bg-transparent text-foreground outline-none font-mono placeholder:text-muted-foreground",
-            getFontClass()
-          )}
-          placeholder={lineType === "empty" ? "Type something..." : ""}
-        />
-      ) : (
-        <div className={cn("pointer-events-none", getFontClass())}>
-          {lineType === "empty" ? (
-            <span className="text-muted-foreground/40 text-xs opacity-0 group-hover/block:opacity-100 transition-opacity">
-              <Plus size={12} className="inline mr-1 -mt-0.5" />
-              click to add content
-            </span>
-          ) : lineType === "checkbox-checked" || lineType === "checkbox-unchecked" ? (
-            (() => {
-              const { checked, text } = extractCheckboxState(line);
-              return (
-                <span className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    readOnly
-                    className="h-3.5 w-3.5 rounded border-border accent-primary"
-                  />
-                  <span className={checked ? "line-through text-muted-foreground" : "text-foreground"}>
-                    {text}
-                  </span>
-                </span>
-              );
-            })()
-          ) : lineType === "hr" ? (
-            <hr className="border-border my-1" />
-          ) : (
-            <Markdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeRaw]}
-              disallowedElements={["input"]}
-            >
-              {line}
-            </Markdown>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+import { DescriptionEditor } from "./DescriptionEditor";
 
 export function TaskDetailModal() {
   const { activeTaskId, closeTaskDetail } = useUIStore();
   const { tasks, updateTask, deleteTask } = useTaskStore();
   const { tags, taskTags, addTagToTask, removeTagFromTask } = useTagStore();
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [dueDate, setDueDate] = useState("");
-  const [activeLineIndex, setActiveLineIndex] = useState(-1);
-
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const task = tasks.find((t) => t.id === activeTaskId);
   const taskTagList = activeTaskId ? taskTags[activeTaskId] || [] : [];
@@ -169,26 +29,17 @@ export function TaskDetailModal() {
   useEffect(() => {
     if (task) {
       setTitle(task.title);
-      setDescription(task.description_md);
       setPriority(task.priority);
       setDueDate(task.due_date || "");
     }
   }, [task]);
-
-  const saveDescription = useCallback(
-    (newDesc: string) => {
-      setDescription(newDesc);
-      updateTask(task!.id, { description_md: newDesc });
-    },
-    [task, updateTask]
-  );
 
   if (!task) return null;
 
   const handleSave = async () => {
     await updateTask(task.id, {
       title: title.trim() || task.title,
-      description_md: description,
+      description_md: task.description_md,
       priority,
       due_date: dueDate || null,
     });
@@ -209,32 +60,9 @@ export function TaskDetailModal() {
     }
   };
 
-  const handleLineChange = (index: number, value: string) => {
-    const lines = description.split("\n");
-    lines[index] = value;
-    saveDescription(lines.join("\n"));
+  const handleDescriptionSave = (markdown: string) => {
+    updateTask(task.id, { description_md: markdown });
   };
-
-  const handleInsertBelow = (index: number) => {
-    const lines = description.split("\n");
-    lines.splice(index + 1, 0, "");
-    saveDescription(lines.join("\n"));
-    setActiveLineIndex(index + 1);
-  };
-
-  const handleRemoveLine = (index: number) => {
-    const lines = description.split("\n");
-    if (lines.length <= 1) {
-      saveDescription("");
-      return;
-    }
-    lines.splice(index, 1);
-    saveDescription(lines.join("\n"));
-    const newIdx = Math.min(index - 1, lines.length - 1);
-    setActiveLineIndex(newIdx);
-  };
-
-  const lines = description.split("\n");
 
   return (
     <Dialog open={true} onOpenChange={() => closeTaskDetail()}>
@@ -326,29 +154,10 @@ export function TaskDetailModal() {
             Description
           </div>
 
-          <div
-            ref={scrollContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto rounded-md border border-border bg-secondary/30 p-4"
-            onClick={(e) => {
-              if (e.target === scrollContainerRef.current) {
-                setActiveLineIndex(-1);
-              }
-            }}
-          >
-            <div className="kough-prose max-w-none">
-              {lines.map((line, i) => (
-                <LineEditor
-                  key={`${i}-${lines.length}`}
-                  line={line}
-                  isActive={activeLineIndex === i}
-                  onActivate={() => setActiveLineIndex(i)}
-                  onChange={(val) => handleLineChange(i, val)}
-                  onInsertBelow={() => handleInsertBelow(i)}
-                  onRemoveLine={() => handleRemoveLine(i)}
-                />
-              ))}
-            </div>
-          </div>
+          <DescriptionEditor
+            content={task.description_md}
+            onSave={handleDescriptionSave}
+          />
 
           <div className="flex items-center justify-end gap-2 pt-3">
             <Button
