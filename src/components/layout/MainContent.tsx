@@ -6,6 +6,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { TitleBar } from "./TitleBar";
 import { Sidebar } from "./Sidebar";
 import { Board } from "@/components/board/Board";
+import { ActivityView } from "@/components/activity/ActivityView";
 import { TaskDetailModal } from "@/components/task/TaskDetailModal";
 import { TagFilter } from "@/components/tags/TagFilter";
 
@@ -13,7 +14,7 @@ export function MainContent() {
   const { activeBoardId, fetchBoards } = useBoardStore();
   const { fetchTasks } = useTaskStore();
   const { fetchTags } = useTagStore();
-  const { sidebarOpen, taskDetailOpen } = useUIStore();
+  const { sidebarOpen, taskDetailOpen, activeView } = useUIStore();
 
   useEffect(() => {
     fetchBoards();
@@ -32,8 +33,13 @@ export function MainContent() {
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && <Sidebar />}
         <main className="flex flex-1 flex-col overflow-hidden">
-          <TagFilter />
-          <Board />
+          {activeView === "board" && (
+            <>
+              <TagFilter />
+              <Board />
+            </>
+          )}
+          {activeView === "activity" && <ActivityView />}
         </main>
       </div>
       {taskDetailOpen && <TaskDetailModal />}
