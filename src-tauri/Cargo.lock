@@ -1949,6 +1949,7 @@ dependencies = [
  "tauri-plugin-opener",
  "thiserror 2.0.18",
  "uuid",
+ "windows",
 ]
 
 [[package]]
