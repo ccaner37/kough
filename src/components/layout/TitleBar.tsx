@@ -43,7 +43,7 @@ export function TitleBar() {
           <Square size={12} />
         </button>
         <button
-          onClick={() => getCurrentWindow().close()}
+          onClick={() => getCurrentWindow().hide()}
           className="flex h-full w-10 items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
         >
           <X size={14} />
