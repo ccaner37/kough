@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod board;
 pub mod column;
 pub mod tag;
