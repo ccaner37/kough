@@ -1,7 +1,8 @@
 use crate::error::AppError;
 use rusqlite::Connection;
 
-const MIGRATIONS: &[&str] = &["
+const MIGRATIONS: &[&str] = &[
+    "
 CREATE TABLE IF NOT EXISTS boards (
     id          TEXT PRIMARY KEY,
     title       TEXT NOT NULL,
@@ -49,7 +50,22 @@ CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks(column_id);
 CREATE INDEX IF NOT EXISTS idx_tags_board ON tags(board_id);
 CREATE INDEX IF NOT EXISTS idx_task_tags_task ON task_tags(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
-"];
+",
+    "
+CREATE TABLE IF NOT EXISTS activity_sessions (
+    id              TEXT PRIMARY KEY,
+    app_name        TEXT NOT NULL,
+    app_title       TEXT NOT NULL DEFAULT '',
+    started_at      TEXT NOT NULL,
+    ended_at        TEXT,
+    duration_secs   INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_app ON activity_sessions(app_name);
+CREATE INDEX IF NOT EXISTS idx_activity_started ON activity_sessions(started_at);
+CREATE INDEX IF NOT EXISTS idx_activity_ended ON activity_sessions(ended_at);
+",
+];
 
 pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     for (i, sql) in MIGRATIONS.iter().enumerate() {
