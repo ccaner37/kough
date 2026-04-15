@@ -105,3 +105,18 @@ export const DEFAULT_TAG_COLORS = [
   "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
   "#6b7280", "#64748b",
 ];
+
+export interface ActivitySession {
+  id: string;
+  app_name: string;
+  app_title: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_secs: number | null;
+}
+
+export interface AppUsageSummary {
+  app_name: string;
+  total_secs: number;
+  session_count: number;
+}
