@@ -95,9 +95,9 @@ pub fn run() {
             commands::tag::get_tags_for_task,
             commands::tag::add_tag_to_task,
             commands::tag::remove_tag_from_task,
-            commands::activity::get_activity_summary,
-            commands::activity::get_activity_sessions,
-            commands::activity::get_active_session,
+            commands::activity::get_app_usage_summary,
+            commands::activity::get_browser_usage_summary,
+            commands::activity::get_active_tracking,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

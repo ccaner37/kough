@@ -10,6 +10,45 @@ use windows::Win32::UI::WindowsAndMessaging::{
 pub struct ForegroundApp {
     pub process_name: String,
     pub window_title: String,
+    pub is_browser: bool,
+    pub browser_url: Option<String>,
+}
+
+const BROWSERS: &[&str] = &[
+    "msedge.exe",
+    "chrome.exe",
+    "firefox.exe",
+    "brave.exe",
+    "opera.exe",
+    "vivaldi.exe",
+    "arc.exe",
+];
+
+pub fn is_browser(app_name: &str) -> bool {
+    BROWSERS.iter().any(|b| app_name.eq_ignore_ascii_case(b))
+}
+
+pub fn extract_domain(url: &str) -> String {
+    let without_proto = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    let domain = without_proto.split('/').next().unwrap_or(without_proto);
+    let domain = domain.split(':').next().unwrap_or(domain);
+    domain.to_string()
+}
+
+pub fn get_browser_url(hwnd: HWND) -> Option<String> {
+    let title = get_window_text(hwnd);
+    let lower = title.to_lowercase();
+    let start = lower
+        .find("http://")
+        .or_else(|| lower.find("https://"))?;
+    let rest = &title[start..];
+    let end = rest
+        .find(|c: char| c.is_whitespace())
+        .unwrap_or(rest.len());
+    Some(rest[..end].to_string())
 }
 
 pub fn get_foreground_app() -> Option<ForegroundApp> {
@@ -20,10 +59,14 @@ pub fn get_foreground_app() -> Option<ForegroundApp> {
 
     let title = get_window_text(hwnd);
     let process_name = get_process_name(hwnd)?;
+    let browser = is_browser(&process_name);
+    let url = if browser { get_browser_url(hwnd) } else { None };
 
     Some(ForegroundApp {
         process_name,
         window_title: title,
+        is_browser: browser,
+        browser_url: url,
     })
 }
 
@@ -43,7 +86,8 @@ fn get_process_name(hwnd: HWND) -> Option<String> {
         return None;
     }
 
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()? };
+    let process =
+        unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()? };
 
     let mut len: u32 = 512;
     let mut buf = [0u16; 512];

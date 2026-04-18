@@ -65,6 +65,31 @@ CREATE INDEX IF NOT EXISTS idx_activity_app ON activity_sessions(app_name);
 CREATE INDEX IF NOT EXISTS idx_activity_started ON activity_sessions(started_at);
 CREATE INDEX IF NOT EXISTS idx_activity_ended ON activity_sessions(ended_at);
 ",
+    "
+CREATE TABLE IF NOT EXISTS app_usage (
+    id          TEXT PRIMARY KEY,
+    app_name    TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    total_secs  INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_app_usage_unique ON app_usage(app_name, date);
+
+CREATE TABLE IF NOT EXISTS browser_usage (
+    id          TEXT PRIMARY KEY,
+    domain      TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    total_secs  INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_browser_usage_unique ON browser_usage(domain, date);
+
+INSERT OR IGNORE INTO app_usage (id, app_name, date, total_secs)
+SELECT lower(hex(randomblob(16))), app_name, date(started_at), SUM(COALESCE(duration_secs, 0))
+FROM activity_sessions
+WHERE ended_at IS NOT NULL
+GROUP BY app_name, date(started_at);
+
+DROP TABLE IF EXISTS activity_sessions;
+",
 ];
 
 pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
