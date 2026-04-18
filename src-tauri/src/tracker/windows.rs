@@ -1,7 +1,14 @@
 use windows::core::PWSTR;
 use windows::Win32::Foundation::{CloseHandle, HWND};
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+};
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+};
+use windows::Win32::UI::Accessibility::{
+    CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationValuePattern,
+    TreeScope, UIA_AutomationIdPropertyId, UIA_EditControlTypeId, UIA_ValuePatternId,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
@@ -38,17 +45,61 @@ pub fn extract_domain(url: &str) -> String {
     domain.to_string()
 }
 
+static COM_INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+
+fn ensure_com() {
+    COM_INIT.get_or_init(|| {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        }
+    });
+}
+
 pub fn get_browser_url(hwnd: HWND) -> Option<String> {
-    let title = get_window_text(hwnd);
-    let lower = title.to_lowercase();
-    let start = lower
-        .find("http://")
-        .or_else(|| lower.find("https://"))?;
-    let rest = &title[start..];
-    let end = rest
-        .find(|c: char| c.is_whitespace())
-        .unwrap_or(rest.len());
-    Some(rest[..end].to_string())
+    ensure_com();
+
+    let automation: IUIAutomation = unsafe {
+        CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL).ok()?
+    };
+
+    let element: IUIAutomationElement = unsafe {
+        automation.ElementFromHandle(hwnd).ok()?
+    };
+
+    let auto_id = windows::core::BSTR::from("addressEditBox");
+    let condition = unsafe {
+        let variant = windows::Win32::System::Variant::VARIANT::from(auto_id);
+        automation.CreatePropertyCondition(UIA_AutomationIdPropertyId, &variant).ok()?
+    };
+
+    let address_bar = unsafe {
+        element.FindFirst(TreeScope(4), &condition).ok()?
+    };
+
+    if let Ok(pattern) = unsafe { address_bar.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) } {
+        if let Ok(bstr) = unsafe { pattern.CurrentValue() } {
+            let url = bstr.to_string();
+            if !url.is_empty() {
+                return Some(url);
+            }
+        }
+    }
+
+    let variant = windows::Win32::System::Variant::VARIANT::from(UIA_EditControlTypeId.0);
+    if let Ok(cond2) = unsafe { automation.CreatePropertyCondition(UIA_AutomationIdPropertyId, &variant) } {
+        if let Ok(edit) = unsafe { element.FindFirst(TreeScope(4), &cond2) } {
+            if let Ok(pattern) = unsafe { edit.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) } {
+                if let Ok(bstr) = unsafe { pattern.CurrentValue() } {
+                    let url = bstr.to_string();
+                    if !url.is_empty() {
+                        return Some(url);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 pub fn get_foreground_app() -> Option<ForegroundApp> {
