@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { useActivityStore } from "@/stores/activityStore";
 import { SummaryCards } from "./SummaryCards";
 import { ActivityChart } from "./ActivityChart";
-import { SessionTimeline } from "./SessionTimeline";
+import { BrowserDetail } from "./BrowserDetail";
+import { CalendarPicker } from "./CalendarPicker";
 import { cn } from "@/lib/utils";
 
 const PRESETS = [
@@ -15,51 +16,60 @@ const PRESETS = [
 
 function toDateStr(offset: number | null): { start: string; end: string } {
   if (offset === null) {
-    return { start: "2000-01-01T00:00:00Z", end: farFuture() };
+    return { start: "2000-01-01", end: farFuture() };
   }
   const d = new Date();
   if (offset < 0) d.setDate(d.getDate() + offset);
-  d.setHours(0, 0, 0, 0);
-  const start = d.toISOString();
-  const endD = new Date(d);
+  const start = d.toISOString().split("T")[0];
+  let endD: Date;
   if (offset === 0 || offset === -1) {
+    endD = new Date(d);
     endD.setDate(endD.getDate() + 1);
   } else {
-    endD.setDate(new Date().getDate() + 1);
+    endD = new Date();
+    endD.setDate(endD.getDate() + 1);
   }
-  return { start, end: endD.toISOString() };
+  return { start, end: endD.toISOString().split("T")[0] };
 }
 
 function farFuture(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() + 10);
-  return d.toISOString();
+  return d.toISOString().split("T")[0];
 }
 
 export function ActivityView() {
   const {
-    summary, sessions, activeSession, loading,
-    fetchSummary, fetchSessions, fetchActiveSession,
-    setDateRange,
+    appSummary, browserSummary, activeTracking, loading,
+    fetchAppSummary, fetchBrowserSummary, fetchActiveTracking,
+    startDate, endDate, setDateRange,
   } = useActivityStore();
 
   useEffect(() => {
-    fetchSummary();
-    fetchSessions();
-  }, []);
+    fetchAppSummary();
+    fetchBrowserSummary();
+  }, [startDate, endDate]);
 
   useEffect(() => {
-    const interval = setInterval(fetchActiveSession, 5000);
-    fetchActiveSession();
+    const interval = setInterval(fetchActiveTracking, 5000);
+    fetchActiveTracking();
     return () => clearInterval(interval);
   }, []);
 
   const handlePreset = (offset: number | null) => {
     const { start, end } = toDateStr(offset);
     setDateRange(start, end);
-    useActivityStore.setState({ startDate: start, endDate: end });
-    fetchSummary();
-    fetchSessions();
+  };
+
+  const handleCalendarRange = (start: string, end: string) => {
+    const actualEnd = new Date(end);
+    actualEnd.setDate(actualEnd.getDate() + 1);
+    setDateRange(start, actualEnd.toISOString().split("T")[0]);
+  };
+
+  const activePreset = (offset: number | null): boolean => {
+    const { start, end } = toDateStr(offset);
+    return startDate === start && endDate === end;
   };
 
   return (
@@ -67,26 +77,34 @@ export function ActivityView() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Activity</h2>
-          {activeSession && (
+          {activeTracking && activeTracking.app_name && (
             <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-              Tracking: {activeSession.app_name.replace(".exe", "")}
+              Tracking: {activeTracking.app_name.replace(".exe", "")}
+              {activeTracking.domain && ` — ${activeTracking.domain}`}
             </p>
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
           {PRESETS.map((p) => (
             <button
               key={p.label}
               onClick={() => handlePreset(p.offset)}
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs transition-colors",
-                "text-muted-foreground hover:bg-accent/50"
+                activePreset(p.offset)
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/50"
               )}
             >
               {p.label}
             </button>
           ))}
+          <CalendarPicker
+            startDate={startDate}
+            endDate={endDate}
+            onRangeSelect={handleCalendarRange}
+          />
         </div>
       </div>
 
@@ -96,9 +114,9 @@ export function ActivityView() {
         </div>
       ) : (
         <>
-          <SummaryCards summary={summary} totalSessions={sessions.length} />
-          <ActivityChart summary={summary} />
-          <SessionTimeline sessions={sessions} />
+          <SummaryCards appSummary={appSummary} browserSummary={browserSummary} />
+          <ActivityChart summary={appSummary} />
+          <BrowserDetail summary={browserSummary} />
         </>
       )}
     </div>

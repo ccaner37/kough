@@ -5,7 +5,7 @@ import type {
   CreateColumnInput, UpdateColumnInput,
   CreateTaskInput, UpdateTaskInput, MoveTaskInput, ReorderTaskInput,
   CreateTagInput, UpdateTagInput,
-  ActivitySession, AppUsageSummary,
+  AppUsageSummary, BrowserUsageSummary, ActiveTracking,
 } from "@/types";
 
 const cmd = <T>(name: string, args?: Record<string, unknown>): Promise<T> =>
@@ -44,10 +44,10 @@ export const api = {
     removeFromTask: (taskId: string, tagId: string) => cmd<void>("remove_tag_from_task", { taskId, tagId }),
   },
   activity: {
-    summary: (startDate: string, endDate: string) =>
-      cmd<AppUsageSummary[]>("get_activity_summary", { startDate, endDate }),
-    sessions: (startDate: string, endDate: string) =>
-      cmd<ActivitySession[]>("get_activity_sessions", { startDate, endDate }),
-    activeSession: () => cmd<ActivitySession | null>("get_active_session"),
+    appSummary: (startDate: string, endDate: string) =>
+      cmd<AppUsageSummary[]>("get_app_usage_summary", { startDate, endDate }),
+    browserSummary: (startDate: string, endDate: string) =>
+      cmd<BrowserUsageSummary[]>("get_browser_usage_summary", { startDate, endDate }),
+    activeTracking: () => cmd<ActiveTracking>("get_active_tracking"),
   },
 };

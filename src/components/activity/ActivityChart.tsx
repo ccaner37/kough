@@ -7,9 +7,7 @@ interface ActivityChartProps {
 function formatDuration(secs: number): string {
   const hours = Math.floor(secs / 3600);
   const minutes = Math.floor((secs % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
+  if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }
 
@@ -20,7 +18,9 @@ const BAR_COLORS = [
 ];
 
 export function ActivityChart({ summary }: ActivityChartProps) {
-  if (summary.length === 0) {
+  const filtered = summary.filter((s) => s.total_secs >= 600);
+
+  if (filtered.length === 0) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
         No activity data for this period
@@ -28,27 +28,30 @@ export function ActivityChart({ summary }: ActivityChartProps) {
     );
   }
 
-  const maxSecs = summary[0].total_secs;
+  const maxSecs = filtered[0].total_secs;
+  const maxSqrt = Math.sqrt(maxSecs);
 
   return (
-    <div className="space-y-2">
-      {summary.map((item, i) => {
-        const widthPercent = Math.max((item.total_secs / maxSecs) * 100, 2);
+    <div className="space-y-4">
+      {filtered.map((item, i) => {
+        const widthPercent = Math.max((Math.sqrt(item.total_secs) / maxSqrt) * 100, 3);
         const color = BAR_COLORS[i % BAR_COLORS.length];
         return (
-          <div key={item.app_name} className="flex items-center gap-3">
-            <span className="w-32 truncate text-sm text-muted-foreground text-right">
-              {item.app_name.replace(".exe", "")}
-            </span>
-            <div className="flex-1 h-6 bg-secondary rounded overflow-hidden">
+          <div key={item.app_name}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-medium">
+                {item.app_name.replace(".exe", "")}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {formatDuration(item.total_secs)}
+              </span>
+            </div>
+            <div className="h-3 bg-secondary rounded-full overflow-hidden">
               <div
-                className={`h-full rounded ${color} transition-all`}
+                className={`h-full rounded-full ${color} transition-all`}
                 style={{ width: `${widthPercent}%` }}
               />
             </div>
-            <span className="w-16 text-sm text-right">
-              {formatDuration(item.total_secs)}
-            </span>
           </div>
         );
       })}
