@@ -8,7 +8,7 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationValuePattern,
-    TreeScope, UIA_AutomationIdPropertyId, UIA_EditControlTypeId, UIA_ValuePatternId,
+    TreeScope, UIA_AutomationIdPropertyId, UIA_ValuePatternId,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
@@ -66,40 +66,39 @@ pub fn get_browser_url(hwnd: HWND) -> Option<String> {
         automation.ElementFromHandle(hwnd).ok()?
     };
 
-    let auto_id = windows::core::BSTR::from("addressEditBox");
+    let url = try_find_address_bar(&automation, &element, "addressEditBox")
+        .or_else(|| try_find_address_bar(&automation, &element, "urlbar-input"))
+        .or_else(|| try_find_address_bar(&automation, &element, "location-bar"));
+
+    url
+}
+
+fn try_find_address_bar(
+    automation: &IUIAutomation,
+    element: &IUIAutomationElement,
+    automation_id: &str,
+) -> Option<String> {
     let condition = unsafe {
-        let variant = windows::Win32::System::Variant::VARIANT::from(auto_id);
+        let variant = windows::Win32::System::Variant::VARIANT::from(automation_id);
         automation.CreatePropertyCondition(UIA_AutomationIdPropertyId, &variant).ok()?
     };
 
-    let address_bar = unsafe {
+    let found = unsafe {
         element.FindFirst(TreeScope(4), &condition).ok()?
     };
 
-    if let Ok(pattern) = unsafe { address_bar.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) } {
-        if let Ok(bstr) = unsafe { pattern.CurrentValue() } {
-            let url = bstr.to_string();
-            if !url.is_empty() {
-                return Some(url);
-            }
-        }
-    }
+    let pattern: IUIAutomationValuePattern = unsafe {
+        found.GetCurrentPatternAs(UIA_ValuePatternId).ok()?
+    };
 
-    let variant = windows::Win32::System::Variant::VARIANT::from(UIA_EditControlTypeId.0);
-    if let Ok(cond2) = unsafe { automation.CreatePropertyCondition(UIA_AutomationIdPropertyId, &variant) } {
-        if let Ok(edit) = unsafe { element.FindFirst(TreeScope(4), &cond2) } {
-            if let Ok(pattern) = unsafe { edit.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) } {
-                if let Ok(bstr) = unsafe { pattern.CurrentValue() } {
-                    let url = bstr.to_string();
-                    if !url.is_empty() {
-                        return Some(url);
-                    }
-                }
-            }
-        }
-    }
+    let bstr = unsafe { pattern.CurrentValue().ok()? };
+    let url = bstr.to_string();
 
-    None
+    if url.is_empty() {
+        None
+    } else {
+        Some(url)
+    }
 }
 
 pub fn get_foreground_app() -> Option<ForegroundApp> {
