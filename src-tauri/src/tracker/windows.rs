@@ -1,14 +1,16 @@
 use windows::core::PWSTR;
 use windows::Win32::Foundation::{CloseHandle, HWND};
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows::Win32::System::Variant::{VariantToStringAlloc, VARIANT};
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationValuePattern,
-    TreeScope, UIA_AutomationIdPropertyId, UIA_ValuePatternId,
+    CUIAutomation, IUIAutomation, IUIAutomationElement, TreeScope_Children,
+    TreeScope_Descendants, TreeScope_Subtree, UIA_AccessKeyPropertyId,
+    UIA_AutomationIdPropertyId, UIA_ControlTypePropertyId, UIA_ValueValuePropertyId,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
@@ -42,63 +44,128 @@ pub fn extract_domain(url: &str) -> String {
         .unwrap_or(url);
     let domain = without_proto.split('/').next().unwrap_or(without_proto);
     let domain = domain.split(':').next().unwrap_or(domain);
+    let domain = domain.strip_prefix("www.").unwrap_or(domain);
     domain.to_string()
 }
 
-static COM_INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-
-fn ensure_com() {
-    COM_INIT.get_or_init(|| {
-        unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+fn decode_variant_string(variant: &VARIANT) -> String {
+    unsafe {
+        match VariantToStringAlloc(variant) {
+            Ok(value) => value.to_string().unwrap_or_default(),
+            Err(_) => String::new(),
         }
-    });
+    }
 }
 
-pub fn get_browser_url(hwnd: HWND) -> Option<String> {
-    ensure_com();
-
-    let automation: IUIAutomation = unsafe {
-        CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL).ok()?
-    };
-
-    let element: IUIAutomationElement = unsafe {
-        automation.ElementFromHandle(hwnd).ok()?
-    };
-
-    let url = try_find_address_bar(&automation, &element, "addressEditBox")
-        .or_else(|| try_find_address_bar(&automation, &element, "urlbar-input"))
-        .or_else(|| try_find_address_bar(&automation, &element, "location-bar"));
-
-    url
-}
-
-fn try_find_address_bar(
+fn get_url_from_automation_id(
     automation: &IUIAutomation,
     element: &IUIAutomationElement,
     automation_id: &str,
 ) -> Option<String> {
+    let variant = VARIANT::from(windows::core::BSTR::from(automation_id));
     let condition = unsafe {
-        let variant = windows::Win32::System::Variant::VARIANT::from(automation_id);
-        automation.CreatePropertyCondition(UIA_AutomationIdPropertyId, &variant).ok()?
+        automation
+            .CreatePropertyCondition(UIA_AutomationIdPropertyId, &variant)
+            .ok()?
     };
-
-    let found = unsafe {
-        element.FindFirst(TreeScope(4), &condition).ok()?
-    };
-
-    let pattern: IUIAutomationValuePattern = unsafe {
-        found.GetCurrentPatternAs(UIA_ValuePatternId).ok()?
-    };
-
-    let bstr = unsafe { pattern.CurrentValue().ok()? };
-    let url = bstr.to_string();
-
+    let found = unsafe { element.FindFirst(TreeScope_Subtree, &condition).ok()? };
+    let value_variant = unsafe { found.GetCurrentPropertyValue(UIA_ValueValuePropertyId).ok()? };
+    if value_variant.is_empty() {
+        return None;
+    }
+    let url = decode_variant_string(&value_variant);
     if url.is_empty() {
         None
     } else {
         Some(url)
     }
+}
+
+fn search_url_chromium(
+    automation: &IUIAutomation,
+    element: &IUIAutomationElement,
+) -> Option<String> {
+    let variant = VARIANT::from(0xC36E_i32);
+    let condition = unsafe {
+        automation
+            .CreatePropertyCondition(UIA_ControlTypePropertyId, &variant)
+            .ok()?
+    };
+    let found = unsafe {
+        let first = element.FindFirst(TreeScope_Children, &condition);
+        if first.is_ok() {
+            first
+        } else {
+            element.FindFirst(TreeScope_Descendants, &condition)
+        }
+        .ok()?
+    };
+    let value_variant = unsafe { found.GetCurrentPropertyValue(UIA_ValueValuePropertyId).ok()? };
+    if value_variant.is_empty() {
+        return None;
+    }
+    let url = decode_variant_string(&value_variant);
+    if url.is_empty() {
+        None
+    } else {
+        Some(url)
+    }
+}
+
+fn get_url_chromium_fallback(
+    automation: &IUIAutomation,
+    element: &IUIAutomationElement,
+) -> Option<String> {
+    let type_variant = VARIANT::from(0xC354_i32);
+    let access_variant = VARIANT::from(windows::core::BSTR::from("Ctrl+L"));
+    let condition = unsafe {
+        let c1 = automation
+            .CreatePropertyCondition(UIA_ControlTypePropertyId, &type_variant)
+            .ok()?;
+        let c2 = automation
+            .CreatePropertyCondition(UIA_AccessKeyPropertyId, &access_variant)
+            .ok()?;
+        automation.CreateAndCondition(&c1, &c2).ok()?
+    };
+    let found = unsafe { element.FindFirst(TreeScope_Subtree, &condition).ok()? };
+    let value_variant = unsafe { found.GetCurrentPropertyValue(UIA_ValueValuePropertyId).ok()? };
+    if value_variant.is_empty() {
+        return None;
+    }
+    let url = decode_variant_string(&value_variant);
+    if url.is_empty() {
+        None
+    } else {
+        Some(url)
+    }
+}
+
+pub fn get_browser_url(hwnd: HWND, process_name: &str) -> Option<String> {
+    if unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_err() {
+        return None;
+    }
+
+    let result = (|| -> Option<String> {
+        let automation: IUIAutomation =
+            unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_ALL).ok()? };
+        let element = unsafe { automation.ElementFromHandle(hwnd).ok()? };
+        let name = process_name.to_lowercase();
+
+        if name.contains("firefox") {
+            get_url_from_automation_id(&automation, &element, "urlbar-input")
+        } else if name.contains("msedge") {
+            get_url_from_automation_id(&automation, &element, "view_1022")
+                .or_else(|| get_url_from_automation_id(&automation, &element, "view_1020"))
+                .or_else(|| search_url_chromium(&automation, &element))
+                .or_else(|| get_url_chromium_fallback(&automation, &element))
+        } else {
+            search_url_chromium(&automation, &element)
+                .or_else(|| get_url_chromium_fallback(&automation, &element))
+        }
+    })();
+
+    unsafe { CoUninitialize() };
+    result
 }
 
 pub fn get_foreground_app() -> Option<ForegroundApp> {
@@ -110,7 +177,11 @@ pub fn get_foreground_app() -> Option<ForegroundApp> {
     let title = get_window_text(hwnd);
     let process_name = get_process_name(hwnd)?;
     let browser = is_browser(&process_name);
-    let url = if browser { get_browser_url(hwnd) } else { None };
+    let url = if browser {
+        get_browser_url(hwnd, &process_name)
+    } else {
+        None
+    };
 
     Some(ForegroundApp {
         process_name,
