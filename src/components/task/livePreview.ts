@@ -17,14 +17,6 @@ class BulletWidget extends WidgetType {
   }
 }
 
-class HRWidget extends WidgetType {
-  toDOM() {
-    const hr = document.createElement("hr");
-    hr.className = "cm-lp-hr";
-    return hr;
-  }
-}
-
 class CheckboxWidget extends WidgetType {
   checked: boolean;
   pos: number;
@@ -92,16 +84,6 @@ function spansActiveLine(
   return false;
 }
 
-function hideEnd(
-  to: number,
-  doc: { length: number; sliceString: (from: number, to: number) => string }
-): number {
-  if (to < doc.length && doc.sliceString(to, to + 1) === " ") {
-    return to + 1;
-  }
-  return to;
-}
-
 function buildDecorations(view: EditorView): DecorationSet {
   const activeLines = getActiveLines(view);
   const doc = view.state.doc;
@@ -116,7 +98,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       if (t === "HeaderMark") {
         decos.push(
-          Decoration.replace({}).range(node.from, hideEnd(node.to, doc))
+          Decoration.mark({ class: "cm-lp-hidden" }).range(node.from, node.to)
         );
       }
 
@@ -148,7 +130,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         t === "EmphasisMark" &&
         node.node.parent?.name === "StrongEmphasis"
       ) {
-        decos.push(Decoration.replace({}).range(node.from, node.to));
+        decos.push(Decoration.mark({ class: "cm-lp-hidden" }).range(node.from, node.to));
       }
 
       if (t === "Emphasis") {
@@ -157,7 +139,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         );
       }
       if (t === "EmphasisMark" && node.node.parent?.name === "Emphasis") {
-        decos.push(Decoration.replace({}).range(node.from, node.to));
+        decos.push(Decoration.mark({ class: "cm-lp-hidden" }).range(node.from, node.to));
       }
 
       if (t === "InlineCode") {
@@ -166,7 +148,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         );
       }
       if (t === "CodeMark" && node.node.parent?.name === "InlineCode") {
-        decos.push(Decoration.replace({}).range(node.from, node.to));
+        decos.push(Decoration.mark({ class: "cm-lp-hidden" }).range(node.from, node.to));
       }
 
       if (t === "Strikethrough") {
@@ -178,12 +160,12 @@ function buildDecorations(view: EditorView): DecorationSet {
         t === "StrikethroughMark" &&
         node.node.parent?.name === "Strikethrough"
       ) {
-        decos.push(Decoration.replace({}).range(node.from, node.to));
+        decos.push(Decoration.mark({ class: "cm-lp-hidden" }).range(node.from, node.to));
       }
 
       if (t === "QuoteMark") {
         decos.push(
-          Decoration.replace({}).range(node.from, hideEnd(node.to, doc))
+          Decoration.mark({ class: "cm-lp-hidden" }).range(node.from, node.to)
         );
         decos.push(
           Decoration.line({ class: "cm-lp-blockquote" }).range(line.from)
@@ -194,9 +176,15 @@ function buildDecorations(view: EditorView): DecorationSet {
         const listParent = node.node.parent?.parent;
         if (listParent?.name === "BulletList") {
           decos.push(
+            Decoration.mark({ class: "cm-lp-hidden" }).range(
+              node.from,
+              node.to
+            )
+          );
+          decos.push(
             Decoration.replace({ widget: new BulletWidget() }).range(
               node.from,
-              hideEnd(node.to, doc)
+              node.from
             )
           );
         }
@@ -204,7 +192,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 
       if (t === "HorizontalRule") {
         decos.push(
-          Decoration.replace({ widget: new HRWidget() }).range(
+          Decoration.mark({ class: "cm-lp-hr-mark" }).range(
             node.from,
             node.to
           )
@@ -223,9 +211,9 @@ function buildDecorations(view: EditorView): DecorationSet {
       const dashTo = dashFrom + match[2].length;
       const bracketFrom = dashTo + 1;
       const bracketTo = bracketFrom + 3;
-      const afterBracket = hideEnd(bracketTo, doc);
+      const afterBracket = bracketTo;
 
-      decos.push(Decoration.replace({}).range(dashFrom, bracketFrom));
+      decos.push(Decoration.mark({ class: "cm-lp-hidden" }).range(dashFrom, bracketFrom));
 
       const isChecked = /[xX]/.test(match[3]);
       decos.push(
@@ -259,6 +247,7 @@ export const livePreview = ViewPlugin.fromClass(
         update.viewportChanged ||
         update.selectionSet
       ) {
+        this.decorations = this.decorations.map(update.changes);
         this.decorations = buildDecorations(update.view);
       }
     }

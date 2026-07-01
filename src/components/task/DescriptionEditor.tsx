@@ -7,6 +7,25 @@ import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
 import { livePreview } from "./livePreview";
 import { editorTheme } from "./codemirrorTheme";
 
+const mobileEnterSupport = [
+  EditorView.contentAttributes.of({ enterkeyhint: "enter" }),
+  EditorView.domEventHandlers({
+    beforeinput: (event, view) => {
+      if (event.inputType === "insertParagraph" || event.inputType === "insertLineBreak") {
+        const { state } = view;
+        const { from } = state.selection.main;
+        view.dispatch({
+          changes: { from, insert: "\n" },
+          selection: { anchor: from + 1 },
+        });
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    },
+  }),
+];
+
 interface DescriptionEditorProps {
   content: string;
   onSave: (markdown: string) => void;
@@ -47,6 +66,7 @@ export function DescriptionEditor({ content, onSave }: DescriptionEditorProps) {
         EditorView.lineWrapping,
         EditorView.editable.of(true),
         EditorState.tabSize.of(2),
+        ...mobileEnterSupport,
       ],
     });
 

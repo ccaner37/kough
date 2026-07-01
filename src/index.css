@@ -286,3 +286,18 @@
   border-top: 1px solid oklch(0.3 0 0);
   margin: 0.4em 0;
 }
+.cm-lp-hidden {
+  font-size: 0;
+  line-height: 0;
+  user-select: none;
+}
+.cm-lp-hr-mark {
+  display: block;
+  height: 0;
+  border: none;
+  border-top: 1px solid oklch(0.3 0 0);
+  margin: 0.4em 0;
+  font-size: 0;
+  line-height: 0;
+  user-select: none;
+}
