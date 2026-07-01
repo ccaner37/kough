@@ -175,18 +175,18 @@ function buildDecorations(view: EditorView): DecorationSet {
       if (t === "ListMark") {
         const listParent = node.node.parent?.parent;
         if (listParent?.name === "BulletList") {
-          decos.push(
-            Decoration.mark({ class: "cm-lp-hidden" }).range(
-              node.from,
-              node.to
-            )
-          );
-          decos.push(
-            Decoration.replace({ widget: new BulletWidget() }).range(
-              node.from,
-              node.from
-            )
-          );
+          const lineText = doc.sliceString(line.from, line.to);
+          if (!/^\s*[-*]\s+\[[xX ]\]/.test(lineText)) {
+            decos.push(
+              Decoration.mark({ class: "cm-lp-hidden" }).range(node.from, node.to)
+            );
+            decos.push(
+              Decoration.replace({ widget: new BulletWidget() }).range(
+                node.from,
+                node.from
+              )
+            );
+          }
         }
       }
 
