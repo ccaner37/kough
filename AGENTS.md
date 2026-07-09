@@ -62,7 +62,7 @@ Frontend talks to Rust exclusively through `api.*` in `src/lib/invoke.ts`.
 - **Error handling**: `AppError` has a manual `Serialize` impl — adding variants requires updating the match in `error.rs`
 - **Lib name**: Cargo lib is named `kough_lib` (not `kough`) to avoid Windows naming conflict; don't rename it
 - `src-tauri/src/main.rs` has `windows_subsystem = "windows"` for release builds — do not remove
-- **Sync**: Cloudflare D1 + Worker. `tags` table has `updated_at` (migration 7). `task_tags` has no timestamps — full table sync. Non-Windows stub for `get_app_icon` in `commands/activity.rs`
+- **Sync**: Cloudflare D1 + Worker. **Full sync only** — every sync pushes and pulls all rows in `boards`, `columns`, `tasks`, `tags`, `task_tags` (no `WHERE updated_at > last_sync` filtering). All kanban timestamps use ms-precision `Z` format (`chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)`) so lexicographic comparison works across clients and server. Soft-deletes bump `updated_at` so they propagate. `apply_changes` wraps the whole batch in a transaction with per-row savepoints — FK errors are collected and returned to the UI, sync continues. Non-Windows stub for `get_app_icon` in `commands/activity.rs`
 
 ## Activity tracking (Screen Time) — Windows only
 
@@ -121,21 +121,25 @@ Cross-device sync via Cloudflare D1 + Worker. Free tier (5M reads/day, 100K writ
 
 ### Architecture
 
-- **`sync-worker/`** — Cloudflare Worker (REST API). Validates `X-Sync-Key` header, upserts to D1, returns changes since last sync
-- **`src-tauri/src/sync/`** — Rust sync module: `client.rs` (HTTP via reqwest), `changes.rs` (collect local changes), `apply.rs` (apply remote changes)
-- **`src-tauri/src/commands/sync.rs`** — Tauri commands: `get_sync_settings`, `save_sync_settings`, `run_sync`
-- **`src/stores/syncStore.ts`** — Zustand store, `triggerSync()` debounced helper
+- **`sync-worker/`** — Cloudflare Worker (REST API). Validates `X-Sync-Key` header, upserts to D1, returns ALL rows per table
+- **`src-tauri/src/sync/`** — Rust sync module: `client.rs` (HTTP via reqwest), `changes.rs` (collect ALL local rows), `apply.rs` (apply remote rows in a transaction with per-row savepoints)
+- **`src-tauri/src/commands/sync.rs`** — Tauri commands: `get_sync_settings`, `save_sync_settings`, `run_sync`, `force_resync`
+- **`src/stores/syncStore.ts`** — Zustand store, `triggerSync()` debounced helper, `forceResync()` method
 
-### Protocol
+### Protocol (full sync)
 
-1. Collect local changes where `updated_at > last_sync`
+1. Collect ALL local rows from `boards`, `columns`, `tasks`, `tags`, `task_tags`
 2. POST to Worker with `{ last_sync, changes }`
-3. Worker upserts to D1 (last-write-wins by `updated_at`)
-4. Worker returns all records modified since `last_sync`
-5. Apply remote changes to local SQLite
-6. Update `last_sync` to server time
+3. Worker upserts to D1 (last-write-wins by `updated_at` via `ON CONFLICT DO UPDATE`)
+4. Worker returns ALL rows from every table (no `WHERE` filter)
+5. Client applies remote rows inside a single transaction; per-row savepoints isolate failures (e.g. orphan FK) so one bad row doesn't abort the batch. Failed rows are returned to the UI.
+6. `last_sync` updated to `response.server_time` after a successful apply
 
-`task_tags` has no `updated_at` — always synced as full table. `sync_meta` table stores config (key/value).
+No incremental filtering — eliminates the race where a row created between `last_sync` read and push would never be sent. Bandwidth cost is negligible for a kanban app. `sync_meta` table stores config (key/value).
+
+### Recovery
+
+- **Resync from Server** button in SyncSettings → `force_resync` Tauri command resets `last_sync` to epoch then runs sync. With full sync this is a no-op for correctness but remains as a manual escape hatch. The UI shows the count of failed/skipped rows per sync so FK issues are visible immediately.
 
 ### Setup
 
