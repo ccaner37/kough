@@ -11,6 +11,7 @@ interface SyncState {
   fetchSettings: () => Promise<void>;
   saveSettings: (enabled: boolean, serverUrl: string, syncKey: string) => Promise<void>;
   runSync: () => Promise<SyncResult | null>;
+  forceResync: () => Promise<SyncResult | null>;
 }
 
 export const useSyncStore = create<SyncState>((set, get) => ({
@@ -65,6 +66,12 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     } finally {
       set({ syncing: false });
     }
+  },
+
+  forceResync: async () => {
+    await api.sync.forceResync();
+    set({ settings: { ...get().settings, last_sync: "1970-01-01T00:00:00Z" } });
+    return get().runSync();
   },
 }));
 

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSyncStore } from "@/stores/syncStore";
-import { RefreshCw, Cloud, CloudOff } from "lucide-react";
+import { RefreshCw, Cloud, CloudOff, AlertTriangle } from "lucide-react";
 
 export function SyncSettings() {
-  const { settings, syncing, lastResult, lastError, fetchSettings, saveSettings, runSync } = useSyncStore();
+  const { settings, syncing, lastResult, lastError, fetchSettings, saveSettings, runSync, forceResync } = useSyncStore();
   const [enabled, setEnabled] = useState(false);
   const [serverUrl, setServerUrl] = useState("");
   const [syncKey, setSyncKey] = useState("");
@@ -23,6 +23,11 @@ export function SyncSettings() {
     await saveSettings(enabled, serverUrl, syncKey);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleForceResync = async () => {
+    if (!window.confirm("Resync from server will re-download all your data from the server. Continue?")) return;
+    await forceResync();
   };
 
   return (
@@ -91,6 +96,15 @@ export function SyncSettings() {
             <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
             {syncing ? "Syncing..." : "Sync Now"}
           </button>
+          <button
+            onClick={handleForceResync}
+            disabled={syncing || !enabled}
+            className="flex items-center gap-1.5 rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+            title="Re-download all data from the server (recovery option)"
+          >
+            <AlertTriangle size={14} />
+            Resync from Server
+          </button>
         </div>
 
         {settings.last_sync && !settings.last_sync.startsWith("1970") && (
@@ -107,9 +121,16 @@ export function SyncSettings() {
         )}
 
         {lastResult && lastResult.status === "ok" && (
-          <div className="flex items-center gap-1.5 text-xs text-green-500">
-            <Cloud size={14} />
-            Synced — {lastResult.applied} records applied
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs text-green-500">
+              <Cloud size={14} />
+              Synced — {lastResult.applied} records applied
+            </div>
+            {lastResult.failed && lastResult.failed.length > 0 && (
+              <div className="text-xs text-yellow-500">
+                {lastResult.failed.length} row(s) skipped (will retry next sync)
+              </div>
+            )}
           </div>
         )}
 
