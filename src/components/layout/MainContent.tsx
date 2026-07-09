@@ -46,9 +46,19 @@ export function MainContent() {
 
   useEffect(() => {
     fetchSettings().then(() => {
-      runSync();
+      runSync().then((result) => {
+        if (result?.status === "ok") {
+          fetchBoards().then(() => {
+            const bid = useBoardStore.getState().activeBoardId;
+            if (bid) {
+              fetchTasks(bid);
+              fetchTags(bid);
+            }
+          });
+        }
+      });
     });
-  }, [fetchSettings, runSync]);
+  }, [fetchSettings, runSync, fetchBoards, fetchTasks, fetchTags]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
