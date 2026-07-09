@@ -93,19 +93,29 @@ pub async fn run_sync(db: State<'_, DbState>) -> Result<serde_json::Value, AppEr
     let response = sync_state.push_and_pull(local_changes).await
         .map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e)))?;
 
-    let applied = {
-        let conn = db.conn.lock().map_err(|e| {
+    let result = {
+        let mut conn = db.conn.lock().map_err(|e| {
             AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
         })?;
-        let count = crate::sync::apply::apply_changes(&conn, &response.changes)
+        let res = crate::sync::apply::apply_changes(&mut conn, &response.changes)
             .map_err(|e| AppError::Database(rusqlite::Error::InvalidParameterName(e)))?;
         write_meta(&conn, "last_sync", &response.server_time)?;
-        count
+        res
     };
 
     Ok(serde_json::json!({
         "status": "ok",
         "server_time": response.server_time,
-        "applied": applied,
+        "applied": result.applied,
+        "failed": result.failed,
     }))
+}
+
+#[tauri::command]
+pub fn force_resync(db: State<'_, DbState>) -> Result<(), AppError> {
+    let conn = db.conn.lock().map_err(|e| {
+        AppError::Database(rusqlite::Error::InvalidParameterName(e.to_string()))
+    })?;
+    write_meta(&conn, "last_sync", "1970-01-01T00:00:00Z")?;
+    Ok(())
 }

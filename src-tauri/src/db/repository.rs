@@ -25,7 +25,7 @@ pub fn create_board(
     input: &board::CreateBoardInput,
 ) -> Result<board::Board, AppError> {
     let id = Uuid::now_v7().to_string();
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
         "INSERT INTO boards (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
         params![id, input.title, now],
@@ -53,7 +53,7 @@ pub fn update_board(
     conn: &Connection,
     input: &board::UpdateBoardInput,
 ) -> Result<board::Board, AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
         "UPDATE boards SET title = ?1, updated_at = ?2 WHERE id = ?3",
         params![input.title, now, input.id],
@@ -67,20 +67,20 @@ pub fn update_board(
 }
 
 pub fn delete_board(conn: &Connection, board_id: &str) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let rows = conn.execute(
-        "UPDATE boards SET deleted_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+        "UPDATE boards SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
         params![now, board_id],
     )?;
     if rows == 0 {
         return Err(AppError::NotFound(format!("Board {} not found", board_id)));
     }
     conn.execute(
-        "UPDATE columns SET deleted_at = ?1 WHERE board_id = ?2 AND deleted_at IS NULL",
+        "UPDATE columns SET deleted_at = ?1, updated_at = ?1 WHERE board_id = ?2 AND deleted_at IS NULL",
         params![now, board_id],
     )?;
     conn.execute(
-        "UPDATE tasks SET deleted_at = ?1 WHERE column_id IN (SELECT id FROM columns WHERE board_id = ?2) AND deleted_at IS NULL",
+        "UPDATE tasks SET deleted_at = ?1, updated_at = ?1 WHERE column_id IN (SELECT id FROM columns WHERE board_id = ?2) AND deleted_at IS NULL",
         params![now, board_id],
     )?;
     Ok(())
@@ -113,7 +113,7 @@ pub fn create_column(
     input: &column::CreateColumnInput,
 ) -> Result<column::Column, AppError> {
     let id = Uuid::now_v7().to_string();
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
     let max_pos: f64 = conn.query_row(
         "SELECT COALESCE(MAX(position), 0) FROM columns WHERE board_id = ?1",
@@ -139,7 +139,7 @@ pub fn create_column(
 }
 
 pub fn update_column(conn: &Connection, input: &column::UpdateColumnInput) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
         "UPDATE columns SET title = ?1, updated_at = ?2 WHERE id = ?3",
         params![input.title, now, input.id],
@@ -148,9 +148,9 @@ pub fn update_column(conn: &Connection, input: &column::UpdateColumnInput) -> Re
 }
 
 pub fn delete_column(conn: &Connection, column_id: &str) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let rows = conn.execute(
-        "UPDATE columns SET deleted_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+        "UPDATE columns SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
         params![now, column_id],
     )?;
     if rows == 0 {
@@ -160,7 +160,7 @@ pub fn delete_column(conn: &Connection, column_id: &str) -> Result<(), AppError>
         )));
     }
     conn.execute(
-        "UPDATE tasks SET deleted_at = ?1 WHERE column_id = ?2 AND deleted_at IS NULL",
+        "UPDATE tasks SET deleted_at = ?1, updated_at = ?1 WHERE column_id = ?2 AND deleted_at IS NULL",
         params![now, column_id],
     )?;
     Ok(())
@@ -171,7 +171,7 @@ pub fn reorder_columns(
     column_id: &str,
     new_position: f64,
 ) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
         "UPDATE columns SET position = ?1, updated_at = ?2 WHERE id = ?3",
         params![new_position, now, column_id],
@@ -235,7 +235,7 @@ pub fn create_task(
     input: &task::CreateTaskInput,
 ) -> Result<task::Task, AppError> {
     let id = Uuid::now_v7().to_string();
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
     let max_pos: f64 = conn.query_row(
         "SELECT COALESCE(MAX(position), 0) FROM tasks WHERE column_id = ?1",
@@ -270,7 +270,7 @@ pub fn update_task(
     conn: &Connection,
     input: &task::UpdateTaskInput,
 ) -> Result<task::Task, AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
     let existing: task::Task = conn.query_row(
         "SELECT id, column_id, title, description_md, position, priority, due_date, created_at, updated_at FROM tasks WHERE id = ?1",
@@ -322,7 +322,7 @@ pub fn move_task(
     target_column_id: &str,
     new_position: f64,
 ) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
         "UPDATE tasks SET column_id = ?1, position = ?2, updated_at = ?3 WHERE id = ?4",
         params![target_column_id, new_position, now, task_id],
@@ -331,7 +331,7 @@ pub fn move_task(
 }
 
 pub fn reorder_task(conn: &Connection, task_id: &str, new_position: f64) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
         "UPDATE tasks SET position = ?1, updated_at = ?2 WHERE id = ?3",
         params![new_position, now, task_id],
@@ -340,9 +340,9 @@ pub fn reorder_task(conn: &Connection, task_id: &str, new_position: f64) -> Resu
 }
 
 pub fn delete_task(conn: &Connection, task_id: &str) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let rows = conn.execute(
-        "UPDATE tasks SET deleted_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+        "UPDATE tasks SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
         params![now, task_id],
     )?;
     if rows == 0 {
@@ -416,9 +416,9 @@ pub fn update_tag(conn: &Connection, input: &tag::UpdateTagInput) -> Result<tag:
 }
 
 pub fn delete_tag(conn: &Connection, tag_id: &str) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let rows = conn.execute(
-        "UPDATE tags SET deleted_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+        "UPDATE tags SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
         params![now, tag_id],
     )?;
     if rows == 0 {
@@ -451,7 +451,7 @@ pub fn get_tags_for_task(conn: &Connection, task_id: &str) -> Result<Vec<tag::Ta
 }
 
 pub fn add_tag_to_task(conn: &Connection, task_id: &str, tag_id: &str) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
         "INSERT OR IGNORE INTO task_tags (task_id, tag_id, updated_at, deleted_at) VALUES (?1, ?2, ?3, NULL)",
         params![task_id, tag_id, now],
@@ -468,7 +468,7 @@ pub fn remove_tag_from_task(
     task_id: &str,
     tag_id: &str,
 ) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
         "UPDATE task_tags SET deleted_at = ?3, updated_at = ?3 WHERE task_id = ?1 AND tag_id = ?2 AND deleted_at IS NULL",
         params![task_id, tag_id, now],

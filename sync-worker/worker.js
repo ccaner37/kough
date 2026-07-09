@@ -56,16 +56,9 @@ async function handleSync(request, env) {
 
     const result = {};
     for (const table of SYNC_TABLES) {
-      let query;
-      if (table === "task_tags") {
-        query = `SELECT * FROM ${table} WHERE updated_at > ?1 OR (deleted_at IS NOT NULL AND deleted_at > ?1)`;
-        const { results } = await env.DB.prepare(query).bind(last_sync).all();
-        result[table] = results || [];
-      } else {
-        query = `SELECT * FROM ${table} WHERE updated_at > ?1 OR (updated_at IS NULL AND deleted_at > ?1)`;
-        const { results } = await env.DB.prepare(query).bind(last_sync).all();
-        result[table] = results || [];
-      }
+      const query = `SELECT * FROM ${table}`;
+      const { results } = await env.DB.prepare(query).all();
+      result[table] = results || [];
     }
 
     return new Response(JSON.stringify({ server_time: serverTime, changes: result }), {

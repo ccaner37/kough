@@ -119,6 +119,7 @@ pub fn run() {
             commands::sync::get_sync_settings,
             commands::sync::save_sync_settings,
             commands::sync::run_sync,
+            commands::sync::force_resync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -139,4 +139,11 @@ export interface SyncResult {
   status: string;
   server_time?: string;
   applied?: number;
+  failed?: SyncFailedRow[];
+}
+
+export interface SyncFailedRow {
+  table: string;
+  id?: string;
+  error: string;
 }
