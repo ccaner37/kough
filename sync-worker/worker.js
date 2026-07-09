@@ -56,8 +56,8 @@ async function handleSync(request, env) {
 
     const result = {};
     for (const table of SYNC_TABLES) {
-      const query = `SELECT * FROM ${table} WHERE updated_at > ?1 OR (deleted_at IS NOT NULL AND deleted_at > ?1)`;
-      const { results } = await env.DB.prepare(query).bind(last_sync).all();
+      const query = `SELECT * FROM ${table}`;
+      const { results } = await env.DB.prepare(query).all();
       result[table] = results || [];
     }
 
