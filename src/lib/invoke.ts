@@ -68,7 +68,7 @@ export const api = {
     getSettings: () => cmd<SyncSettings>("get_sync_settings"),
     saveSettings: (enabled: boolean, serverUrl: string, syncKey: string) =>
       cmd<void>("save_sync_settings", { enabled, serverUrl, syncKey }),
-    run: () => cmd<SyncResult>("run_sync"),
+    run: (mode: "pull" | "push" = "push") => cmd<SyncResult>("run_sync", { mode }),
     forceResync: () => cmd<void>("force_resync"),
   },
 };

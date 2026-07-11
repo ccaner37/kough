@@ -19,45 +19,51 @@ async function handleSync(request, env) {
     }
 
     const body = await request.json();
-    const { last_sync, changes } = body;
+    const { last_sync, changes, mode } = body;
     const serverTime = new Date().toISOString();
+    const since = last_sync || "1970-01-01T00:00:00.000Z";
+    const isPullOnly = mode === "pull";
 
-    for (const table of SYNC_TABLES) {
-      const rows = changes[table] || [];
-      for (const row of rows) {
-        const columns = Object.keys(row);
-        const placeholders = columns.map((_, i) => `?${i + 1}`).join(", ");
+    if (!isPullOnly && changes) {
+      const statements = [];
+      for (const table of SYNC_TABLES) {
+        const rows = changes[table] || [];
+        for (const row of rows) {
+          const columns = Object.keys(row);
+          const placeholders = columns.map((_, i) => `?${i + 1}`).join(", ");
 
-        let sql;
-        if (table === "task_tags") {
-          sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})
-           ON CONFLICT(task_id, tag_id) DO UPDATE SET ${columns
-             .filter((c) => c !== "task_id" && c !== "tag_id")
-             .map((c) => `${c} = excluded.${c}`)
-             .join(", ")}
-           WHERE excluded.updated_at >= ${table}.updated_at OR ${table}.updated_at IS NULL`;
-        } else {
-          const updateClauses = columns
-            .filter((c) => c !== "id")
-            .map((c) => `${c} = excluded.${c}`)
-            .join(", ");
-          sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})
-           ON CONFLICT(id) DO UPDATE SET ${updateClauses}
-           WHERE excluded.updated_at >= ${table}.updated_at OR ${table}.updated_at IS NULL`;
+          let sql;
+          if (table === "task_tags") {
+            sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})
+             ON CONFLICT(task_id, tag_id) DO UPDATE SET ${columns
+               .filter((c) => c !== "task_id" && c !== "tag_id")
+               .map((c) => `${c} = excluded.${c}`)
+               .join(", ")}
+             WHERE excluded.updated_at >= ${table}.updated_at OR ${table}.updated_at IS NULL`;
+          } else {
+            const updateClauses = columns
+              .filter((c) => c !== "id")
+              .map((c) => `${c} = excluded.${c}`)
+              .join(", ");
+            sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})
+             ON CONFLICT(id) DO UPDATE SET ${updateClauses}
+             WHERE excluded.updated_at >= ${table}.updated_at OR ${table}.updated_at IS NULL`;
+          }
+
+          statements.push(
+            env.DB.prepare(sql).bind(...columns.map((c) => row[c]))
+          );
         }
-
-        await env.DB.prepare(sql)
-          .bind(...columns.map((c) => row[c]))
-          .run();
+      }
+      if (statements.length > 0) {
+        await env.DB.batch(statements);
       }
     }
 
-    await env.DB.prepare("DELETE FROM task_tags WHERE deleted_at IS NOT NULL").run();
-
     const result = {};
     for (const table of SYNC_TABLES) {
-      const query = `SELECT * FROM ${table}`;
-      const { results } = await env.DB.prepare(query).all();
+      const query = `SELECT * FROM ${table} WHERE updated_at > ?1`;
+      const { results } = await env.DB.prepare(query).bind(since).all();
       result[table] = results || [];
     }
 

@@ -6,6 +6,7 @@ use super::SyncState;
 pub struct SyncPayload {
     pub last_sync: String,
     pub changes: HashMap<String, Vec<serde_json::Value>>,
+    pub mode: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,10 +19,12 @@ impl SyncState {
     pub async fn push_and_pull(
         &self,
         local_changes: HashMap<String, Vec<serde_json::Value>>,
+        mode: &str,
     ) -> Result<SyncResponse, String> {
         let payload = SyncPayload {
             last_sync: self.last_sync.clone(),
             changes: local_changes,
+            mode: mode.to_string(),
         };
 
         let url = format!("{}/sync", self.server_url);

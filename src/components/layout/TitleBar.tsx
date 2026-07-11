@@ -8,10 +8,16 @@ export function TitleBar() {
   const mobile = isMobile();
 
   return (
-    <div className="flex h-9 items-center justify-between border-b border-border bg-card select-none">
+    <div
+      className={
+        mobile
+          ? "flex items-center justify-between border-b border-border bg-card select-none pt-[env(safe-area-inset-top)]"
+          : "flex h-9 items-center justify-between border-b border-border bg-card select-none"
+      }
+    >
       <div
         data-tauri-drag-region
-        className="flex h-full flex-1 items-center px-2"
+        className="flex h-9 flex-1 items-center px-2"
       >
         <button
           onClick={toggleSidebar}

@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { Tag } from "@/types";
 import { api } from "@/lib/invoke";
-import { triggerSync } from "@/stores/syncStore";
 
 interface TagState {
   tags: Tag[];
@@ -32,7 +31,6 @@ export const useTagStore = create<TagState>((set, get) => ({
   createTag: async (boardId, name, color) => {
     const tag = await api.tags.create({ board_id: boardId, name, color });
     set((s) => ({ tags: [...s.tags, tag] }));
-    triggerSync();
     return tag;
   },
 
@@ -41,7 +39,6 @@ export const useTagStore = create<TagState>((set, get) => ({
     set((s) => ({
       tags: s.tags.map((t) => (t.id === id ? updated : t)),
     }));
-    triggerSync();
   },
 
   deleteTag: async (id) => {
@@ -50,7 +47,6 @@ export const useTagStore = create<TagState>((set, get) => ({
       tags: s.tags.filter((t) => t.id !== id),
       activeTagFilters: new Set([...s.activeTagFilters].filter((tid) => tid !== id)),
     }));
-    triggerSync();
   },
 
   fetchTagsForTask: async (taskId: string) => {
@@ -72,7 +68,6 @@ export const useTagStore = create<TagState>((set, get) => ({
         },
       }));
     }
-    triggerSync();
   },
 
   removeTagFromTask: async (taskId, tagId) => {
@@ -83,7 +78,6 @@ export const useTagStore = create<TagState>((set, get) => ({
         [taskId]: (s.taskTags[taskId] || []).filter((t) => t.id !== tagId),
       },
     }));
-    triggerSync();
   },
 
   toggleTagFilter: (tagId: string) => {

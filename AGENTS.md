@@ -53,6 +53,7 @@ Frontend talks to Rust exclusively through `api.*` in `src/lib/invoke.ts`.
 - **No comments**: the entire codebase has zero comments — do not add any
 - **Platform gating**: Activity tracking is `#[cfg(windows)]` only. Tray/window close is `#[cfg(desktop)]`. Non-Windows stubs for platform-specific commands
 - **Mobile UI**: Sidebar is a drawer overlay on mobile (slide-in with backdrop). TitleBar shows hamburger icon, hides window controls
+- **Android safe area**: `MainActivity` uses `WindowCompat.setDecorFitsSystemWindows(window, true)` so WebView stays below the status bar (targetSdk 36 would otherwise force edge-to-edge). TitleBar also has `env(safe-area-inset-top)` padding as a fallback; root has bottom inset padding on mobile
 
 ## Backend gotchas
 
@@ -62,7 +63,7 @@ Frontend talks to Rust exclusively through `api.*` in `src/lib/invoke.ts`.
 - **Error handling**: `AppError` has a manual `Serialize` impl — adding variants requires updating the match in `error.rs`
 - **Lib name**: Cargo lib is named `kough_lib` (not `kough`) to avoid Windows naming conflict; don't rename it
 - `src-tauri/src/main.rs` has `windows_subsystem = "windows"` for release builds — do not remove
-- **Sync**: Cloudflare D1 + Worker. **Full sync only** — every sync pushes and pulls all rows in `boards`, `columns`, `tasks`, `tags`, `task_tags` (no `WHERE updated_at > last_sync` filtering). All kanban timestamps use ms-precision `Z` format (`chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)`) so lexicographic comparison works across clients and server. Soft-deletes bump `updated_at` so they propagate. `apply_changes` wraps the whole batch in a transaction with per-row savepoints — FK errors are collected and returned to the UI, sync continues. Non-Windows stub for `get_app_icon` in `commands/activity.rs`
+- **Sync**: Cloudflare D1 + Worker. **Incremental** — dual cursors (`pull_cursor`, `push_cursor` in `sync_meta`). Pull on app start only; push+pull on manual Sync. Collects/returns rows by `updated_at` filter. Cursors advance only when apply has zero failures. Soft-deletes and restores bump `updated_at`. Tombstones kept (no hard-delete of soft-deleted `task_tags` in sync paths). All kanban timestamps use ms-precision `Z` format. Non-Windows stub for `get_app_icon` in `commands/activity.rs`
 
 ## Activity tracking (Screen Time) — Windows only
 
@@ -121,25 +122,41 @@ Cross-device sync via Cloudflare D1 + Worker. Free tier (5M reads/day, 100K writ
 
 ### Architecture
 
-- **`sync-worker/`** — Cloudflare Worker (REST API). Validates `X-Sync-Key` header, upserts to D1, returns ALL rows per table
-- **`src-tauri/src/sync/`** — Rust sync module: `client.rs` (HTTP via reqwest), `changes.rs` (collect ALL local rows), `apply.rs` (apply remote rows in a transaction with per-row savepoints)
-- **`src-tauri/src/commands/sync.rs`** — Tauri commands: `get_sync_settings`, `save_sync_settings`, `run_sync`, `force_resync`
-- **`src/stores/syncStore.ts`** — Zustand store, `triggerSync()` debounced helper, `forceResync()` method
+- **`sync-worker/`** — Cloudflare Worker (REST API). Validates `X-Sync-Key`, LWW upserts, returns rows with `updated_at > last_sync`
+- **`src-tauri/src/sync/`** — `client.rs` (HTTP), `changes.rs` (`WHERE updated_at >= push_cursor`), `apply.rs` (LWW + per-row savepoints)
+- **`src-tauri/src/commands/sync.rs`** — `run_sync(mode: "pull" | "push")`, dual cursors, `force_resync`
+- **`src/stores/syncStore.ts`** — `runPull()` (app start), `runSync()` (manual push+pull), `forceResync()`
 
-### Protocol (full sync)
+### Cursors (`sync_meta`)
 
-1. Collect ALL local rows from `boards`, `columns`, `tasks`, `tags`, `task_tags`
-2. POST to Worker with `{ last_sync, changes }`
-3. Worker upserts to D1 (last-write-wins by `updated_at` via `ON CONFLICT DO UPDATE`)
-4. Worker returns ALL rows from every table (no `WHERE` filter)
-5. Client applies remote rows inside a single transaction; per-row savepoints isolate failures (e.g. orphan FK) so one bad row doesn't abort the batch. Failed rows are returned to the UI.
-6. `last_sync` updated to `response.server_time` after a successful apply
+| Key | Role |
+|-----|------|
+| `pull_cursor` | Server time of last successful pull |
+| `push_cursor` | Local time at **start** of last successful push collect |
+| `last_sync` | Display / migration fallback (set to server_time on success) |
 
-No incremental filtering — eliminates the race where a row created between `last_sync` read and push would never be sent. Bandwidth cost is negligible for a kanban app. `sync_meta` table stores config (key/value).
+Legacy `last_sync` alone is used as both cursors until the first successful dual-cursor sync.
+
+### Protocol (incremental)
+
+**App start — pull only (`mode: "pull"`)**
+1. POST `{ last_sync: pull_cursor, changes: {}, mode: "pull" }`
+2. Worker skips upserts; returns rows with `updated_at > pull_cursor`
+3. Client applies; on zero failures: `pull_cursor = server_time` (push_cursor untouched)
+
+**Manual Sync — push + pull (`mode: "push"`)**
+1. `sync_started = now_millis_Z()` before collect
+2. Collect local rows `WHERE updated_at >= push_cursor`
+3. POST `{ last_sync: pull_cursor, changes, mode: "push" }`
+4. Worker LWW-upserts pushed rows (`DB.batch`), returns remote `updated_at > pull_cursor`
+5. Client applies; on zero failures: `pull_cursor = server_time`, `push_cursor = sync_started`
+
+Mid-sync local edits get `updated_at > sync_started` and are picked up on the next push. Any apply failures ⇒ **no cursor advance**.
 
 ### Recovery
 
-- **Resync from Server** button in SyncSettings → `force_resync` Tauri command resets `last_sync` to epoch then runs sync. With full sync this is a no-op for correctness but remains as a manual escape hatch. The UI shows the count of failed/skipped rows per sync so FK issues are visible immediately.
+- **Resync from Server** → resets both cursors + `last_sync` to epoch, then full push+pull once
+- Soft-deleted `task_tags` tombstones are kept (not hard-deleted on server/client sync) so deletes propagate
 
 ### Setup
 
@@ -149,6 +166,8 @@ No incremental filtering — eliminates the race where a row created between `la
 4. `npx wrangler secret put SYNC_KEY`
 5. `npx wrangler deploy`
 6. In Kough: Settings → enter Worker URL + sync key → Enable Sync
+
+After worker code changes: re-deploy with `npx wrangler deploy`. Re-run `schema.sql` if adding indexes on an existing D1.
 
 ## Android
 

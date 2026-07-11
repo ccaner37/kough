@@ -5,16 +5,16 @@ const SYNC_TABLES: &[&str] = &["boards", "columns", "tasks", "tags", "task_tags"
 
 pub fn collect_changes(
     conn: &Connection,
-    _since: &str,
+    since: &str,
 ) -> Result<HashMap<String, Vec<serde_json::Value>>, String> {
     let mut changes: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
 
     for table in SYNC_TABLES {
-        let sql = format!("SELECT * FROM {}", table);
+        let sql = format!("SELECT * FROM {} WHERE updated_at >= ?1", table);
 
         let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
         let rows: Vec<serde_json::Value> = stmt
-            .query_map([], |row| row_to_json(row))
+            .query_map(rusqlite::params![since], |row| row_to_json(row))
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;

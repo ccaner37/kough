@@ -42,11 +42,11 @@ export function MainContent() {
     }
   }, [activeView]);
 
-  const { fetchSettings, runSync } = useSyncStore();
+  const { fetchSettings, runPull } = useSyncStore();
 
   useEffect(() => {
     fetchSettings().then(() => {
-      runSync().then((result) => {
+      runPull().then((result) => {
         if (result?.status === "ok") {
           fetchBoards().then(() => {
             const bid = useBoardStore.getState().activeBoardId;
@@ -58,10 +58,16 @@ export function MainContent() {
         }
       });
     });
-  }, [fetchSettings, runSync, fetchBoards, fetchTasks, fetchTags]);
+  }, [fetchSettings, runPull, fetchBoards, fetchTasks, fetchTags]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    <div
+      className={
+        isMobile()
+          ? "flex h-screen flex-col overflow-hidden bg-background text-foreground pb-[env(safe-area-inset-bottom)]"
+          : "flex h-screen flex-col overflow-hidden bg-background text-foreground"
+      }
+    >
       <TitleBar />
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && <Sidebar />}

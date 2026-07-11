@@ -35,7 +35,7 @@ export function SyncSettings() {
       <div>
         <h2 className="text-lg font-semibold">Sync</h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Sync your boards across devices using Cloudflare D1
+          Pulls on app start. Push your changes with Sync Now.
         </p>
       </div>
 

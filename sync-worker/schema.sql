@@ -3,3 +3,9 @@ CREATE TABLE IF NOT EXISTS columns (id TEXT PRIMARY KEY, board_id TEXT, title TE
 CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, column_id TEXT, title TEXT, description_md TEXT, position REAL, priority TEXT, due_date TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT);
 CREATE TABLE IF NOT EXISTS tags (id TEXT PRIMARY KEY, board_id TEXT, name TEXT, color TEXT, deleted_at TEXT, updated_at TEXT);
 CREATE TABLE IF NOT EXISTS task_tags (task_id TEXT, tag_id TEXT, updated_at TEXT, deleted_at TEXT, PRIMARY KEY(task_id, tag_id));
+
+CREATE INDEX IF NOT EXISTS idx_boards_updated_at ON boards(updated_at);
+CREATE INDEX IF NOT EXISTS idx_columns_updated_at ON columns(updated_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at);
+CREATE INDEX IF NOT EXISTS idx_tags_updated_at ON tags(updated_at);
+CREATE INDEX IF NOT EXISTS idx_task_tags_updated_at ON task_tags(updated_at);

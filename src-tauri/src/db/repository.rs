@@ -503,45 +503,49 @@ pub fn get_tasks_by_tag(conn: &Connection, tag_id: &str) -> Result<Vec<task::Tas
 }
 
 pub fn restore_board(conn: &Connection, board_id: &str) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
-        "UPDATE boards SET deleted_at = NULL WHERE id = ?1",
-        params![board_id],
+        "UPDATE boards SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1",
+        params![board_id, now],
     )?;
     conn.execute(
-        "UPDATE columns SET deleted_at = NULL WHERE board_id = ?1",
-        params![board_id],
+        "UPDATE columns SET deleted_at = NULL, updated_at = ?2 WHERE board_id = ?1",
+        params![board_id, now],
     )?;
     conn.execute(
-        "UPDATE tasks SET deleted_at = NULL WHERE column_id IN (SELECT id FROM columns WHERE board_id = ?1)",
-        params![board_id],
+        "UPDATE tasks SET deleted_at = NULL, updated_at = ?2 WHERE column_id IN (SELECT id FROM columns WHERE board_id = ?1)",
+        params![board_id, now],
     )?;
     Ok(())
 }
 
 pub fn restore_column(conn: &Connection, column_id: &str) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
-        "UPDATE columns SET deleted_at = NULL WHERE id = ?1",
-        params![column_id],
+        "UPDATE columns SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1",
+        params![column_id, now],
     )?;
     conn.execute(
-        "UPDATE tasks SET deleted_at = NULL WHERE column_id = ?1",
-        params![column_id],
+        "UPDATE tasks SET deleted_at = NULL, updated_at = ?2 WHERE column_id = ?1",
+        params![column_id, now],
     )?;
     Ok(())
 }
 
 pub fn restore_task(conn: &Connection, task_id: &str) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
-        "UPDATE tasks SET deleted_at = NULL WHERE id = ?1",
-        params![task_id],
+        "UPDATE tasks SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1",
+        params![task_id, now],
     )?;
     Ok(())
 }
 
 pub fn restore_tag(conn: &Connection, tag_id: &str) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
-        "UPDATE tags SET deleted_at = NULL WHERE id = ?1",
-        params![tag_id],
+        "UPDATE tags SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1",
+        params![tag_id, now],
     )?;
     Ok(())
 }

@@ -68,14 +68,6 @@ pub fn apply_changes(
         }
     }
 
-    if let Err(e) = tx.execute("DELETE FROM task_tags WHERE deleted_at IS NOT NULL", []) {
-        failed.push(FailedRow {
-            table: "task_tags".to_string(),
-            id: None,
-            error: format!("Cleanup failed: {}", e),
-        });
-    }
-
     tx.commit()
         .map_err(|e| format!("Failed to commit: {}", e))?;
 
